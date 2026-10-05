@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
@@ -18,6 +19,101 @@ internal static class Launcher
     }
 }
 
+internal sealed class RoundedPanel : Panel
+{
+    internal int CornerRadius = 18;
+    internal Color BorderColor = Color.FromArgb(225, 231, 239);
+
+    internal RoundedPanel()
+    {
+        DoubleBuffered = true;
+        BackColor = Color.White;
+        Resize += delegate { UpdateShape(); Invalidate(); };
+    }
+
+    private void UpdateShape()
+    {
+        if (Width < 2 || Height < 2) return;
+        using (GraphicsPath path = RoundedPath(new Rectangle(0, 0, Width - 1, Height - 1), CornerRadius))
+        {
+            Region old = Region;
+            Region = new Region(path);
+            if (old != null) old.Dispose();
+        }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        Rectangle bounds = new Rectangle(0, 0, Width - 1, Height - 1);
+        using (GraphicsPath path = RoundedPath(bounds, CornerRadius))
+        using (Pen border = new Pen(BorderColor, 1F))
+            e.Graphics.DrawPath(border, path);
+    }
+
+    internal static GraphicsPath RoundedPath(Rectangle bounds, int radius)
+    {
+        GraphicsPath path = new GraphicsPath();
+        int diameter = Math.Max(2, Math.Min(radius * 2, Math.Min(bounds.Width, bounds.Height)));
+        Rectangle arc = new Rectangle(bounds.X, bounds.Y, diameter, diameter);
+        path.AddArc(arc, 180, 90);
+        arc.X = bounds.Right - diameter;
+        path.AddArc(arc, 270, 90);
+        arc.Y = bounds.Bottom - diameter;
+        path.AddArc(arc, 0, 90);
+        arc.X = bounds.X;
+        path.AddArc(arc, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+}
+
+internal sealed class RoundedButton : Button
+{
+    internal int CornerRadius = 11;
+
+    internal RoundedButton()
+    {
+        FlatStyle = FlatStyle.Flat;
+        FlatAppearance.BorderSize = 0;
+        UseVisualStyleBackColor = false;
+        Resize += delegate { UpdateShape(); };
+    }
+
+    private void UpdateShape()
+    {
+        if (Width < 2 || Height < 2) return;
+        using (GraphicsPath path = RoundedPanel.RoundedPath(new Rectangle(0, 0, Width - 1, Height - 1), CornerRadius))
+        {
+            Region old = Region;
+            Region = new Region(path);
+            if (old != null) old.Dispose();
+        }
+    }
+}
+
+internal sealed class RoundedLabel : Label
+{
+    internal int CornerRadius = 12;
+
+    internal RoundedLabel()
+    {
+        Resize += delegate { UpdateShape(); };
+    }
+
+    private void UpdateShape()
+    {
+        if (Width < 2 || Height < 2) return;
+        using (GraphicsPath path = RoundedPanel.RoundedPath(new Rectangle(0, 0, Width - 1, Height - 1), CornerRadius))
+        {
+            Region old = Region;
+            Region = new Region(path);
+            if (old != null) old.Dispose();
+        }
+    }
+}
+
 internal sealed class ConverterWindow : Form
 {
     private readonly string folder;
@@ -27,6 +123,7 @@ internal sealed class ConverterWindow : Form
     private readonly Panel dropPanel;
     private readonly Label dropTitle;
     private readonly Label dropHint;
+    private readonly Label dropBadge;
     private readonly Button chooseButton;
     private readonly ComboBox modeBox;
     private readonly ComboBox dpiBox;
@@ -81,18 +178,36 @@ internal sealed class ConverterWindow : Form
         title.Location = new Point(0, 0);
         header.Controls.Add(title);
         Label subtitle = new Label();
-        subtitle.Text = "轻松转换文档，文字和表格尽量保持可编辑";
+        subtitle.Text = "保留可编辑文字、公式、表格与插图";
         subtitle.Font = new Font("Microsoft YaHei UI", 9.5F);
         subtitle.ForeColor = Color.FromArgb(102, 112, 133);
         subtitle.AutoSize = true;
         subtitle.Location = new Point(2, 43);
         header.Controls.Add(subtitle);
+        RoundedLabel privacy = new RoundedLabel();
+        privacy.Text = "●  本地转换 · 文件不上传";
+        privacy.TextAlign = ContentAlignment.MiddleCenter;
+        privacy.Font = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
+        privacy.ForeColor = Color.FromArgb(29, 118, 83);
+        privacy.BackColor = Color.FromArgb(230, 247, 239);
+        privacy.Size = new Size(186, 31);
+        privacy.Location = new Point(Width - 255, 9);
+        privacy.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        header.Controls.Add(privacy);
         layout.Controls.Add(header, 0, 0);
 
-        dropPanel = new Panel();
+        dropPanel = new RoundedPanel();
         dropPanel.Dock = DockStyle.Fill;
         dropPanel.BackColor = Color.White;
-        dropPanel.BorderStyle = BorderStyle.FixedSingle;
+        ((RoundedPanel)dropPanel).CornerRadius = 22;
+        ((RoundedPanel)dropPanel).BorderColor = Color.FromArgb(211, 222, 238);
+        dropBadge = new RoundedLabel();
+        dropBadge.Text = "PDF";
+        dropBadge.TextAlign = ContentAlignment.MiddleCenter;
+        dropBadge.Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold);
+        dropBadge.ForeColor = Color.FromArgb(37, 99, 235);
+        dropBadge.BackColor = Color.FromArgb(235, 243, 255);
+        dropBadge.Size = new Size(52, 32);
         dropTitle = new Label();
         dropTitle.Text = "拖放 PDF 文件到这里";
         dropTitle.Font = new Font("Microsoft YaHei UI", 16F, FontStyle.Bold);
@@ -103,7 +218,7 @@ internal sealed class ConverterWindow : Form
         dropHint.Font = new Font("Microsoft YaHei UI", 9F);
         dropHint.ForeColor = Color.FromArgb(102, 112, 133);
         dropHint.AutoSize = true;
-        chooseButton = new Button();
+        chooseButton = new RoundedButton();
         chooseButton.Text = "选择 PDF 文件";
         chooseButton.Size = new Size(150, 42);
         chooseButton.FlatStyle = FlatStyle.Flat;
@@ -112,17 +227,20 @@ internal sealed class ConverterWindow : Form
         chooseButton.ForeColor = Color.White;
         chooseButton.Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold);
         chooseButton.Cursor = Cursors.Hand;
+        chooseButton.Padding = new Padding(5, 1, 5, 1);
+        chooseButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(29, 78, 216);
         chooseButton.Click += ChooseFiles;
+        dropPanel.Controls.Add(dropBadge);
         dropPanel.Controls.Add(dropTitle);
         dropPanel.Controls.Add(dropHint);
         dropPanel.Controls.Add(chooseButton);
         dropPanel.Resize += CenterDropControls;
         layout.Controls.Add(dropPanel, 0, 1);
 
-        Panel settings = new Panel();
+        Panel settings = new RoundedPanel();
         settings.Dock = DockStyle.Fill;
         settings.BackColor = Color.White;
-        settings.BorderStyle = BorderStyle.FixedSingle;
+        ((RoundedPanel)settings).CornerRadius = 18;
         layout.Controls.Add(settings, 0, 2);
         Label settingsTitle = MakeLabel("转换设置", 18, 15, 12F, true, Color.FromArgb(24, 34, 48));
         settings.Controls.Add(settingsTitle);
@@ -163,6 +281,11 @@ internal sealed class ConverterWindow : Form
         folderButton.Text = "选择文件夹…";
         folderButton.Location = new Point(470, 103);
         folderButton.Size = new Size(116, 33);
+        folderButton.FlatStyle = FlatStyle.Flat;
+        folderButton.FlatAppearance.BorderSize = 0;
+        folderButton.BackColor = Color.FromArgb(235, 243, 255);
+        folderButton.ForeColor = Color.FromArgb(37, 99, 235);
+        folderButton.Cursor = Cursors.Hand;
         folderButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         folderButton.Click += ChooseOutputFolder;
         settings.Controls.Add(folderButton);
@@ -170,6 +293,10 @@ internal sealed class ConverterWindow : Form
         resetButton.Text = "恢复默认";
         resetButton.Location = new Point(594, 103);
         resetButton.Size = new Size(96, 33);
+        resetButton.FlatStyle = FlatStyle.Flat;
+        resetButton.FlatAppearance.BorderColor = Color.FromArgb(220, 226, 235);
+        resetButton.BackColor = Color.White;
+        resetButton.Cursor = Cursors.Hand;
         resetButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         resetButton.Click += ResetOutputFolder;
         settings.Controls.Add(resetButton);
@@ -236,9 +363,10 @@ internal sealed class ConverterWindow : Form
         if (dropPanel == null || dropTitle == null || dropHint == null || chooseButton == null)
             return;
         int center = dropPanel.ClientSize.Width / 2;
-        dropTitle.Location = new Point(center - dropTitle.Width / 2, 49);
-        dropHint.Location = new Point(center - dropHint.Width / 2, 84);
-        chooseButton.Location = new Point(center - chooseButton.Width / 2, 113);
+        dropBadge.Location = new Point(center - dropBadge.Width / 2, 29);
+        dropTitle.Location = new Point(center - dropTitle.Width / 2, 72);
+        dropHint.Location = new Point(center - dropHint.Width / 2, 107);
+        chooseButton.Location = new Point(center - chooseButton.Width / 2, 139);
     }
 
     private void ModeChanged(object sender, EventArgs e)
