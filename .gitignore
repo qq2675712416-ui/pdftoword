@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+.qa-template/
 
 # Generated packages and build output
 release/
