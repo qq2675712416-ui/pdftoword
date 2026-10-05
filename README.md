@@ -10,7 +10,7 @@
 
 ## 从源码运行
 
-需要 Windows 和 Python。安装依赖后运行：
+需要 Windows 和 Python。安装依赖后运行桌面界面：
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -35,7 +35,7 @@ python build_release.py
 
 ## 转换模式
 
-- **可编辑文字**：尽量保留文字位置和格式；识别到的表格可作为 Word 表格编辑，标题会使用 Word 标题样式。复杂版式和扫描页可能需要手工整理；扫描 PDF 请先做 OCR。
+- **可编辑文字**：尽量保留文字位置和格式；识别到的公式会转为 Word 原生公式，表格可作为 Word 表格编辑，插图会作为图片插入，标题会使用 Word 标题样式。复杂版式和扫描页可能需要手工整理；扫描 PDF 请先做 OCR。
 - **外观保真（图片）**：将页面作为图片放入 Word，适合保留视觉外观，页面文字不能直接编辑。
 
 ## 隐私
