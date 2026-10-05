@@ -1,0 +1,20 @@
+# Python cache and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Generated packages and build output
+release/
+dist/
+build/
+PDF转Word-免安装版.zip
+
+# User documents and conversion samples
+*.pdf
+*.docx
+test*
+转换结果*
+
+# Local preview and review images
+*.png
