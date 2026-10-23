@@ -6,6 +6,8 @@
 
 从 [GitHub 直接下载免安装压缩包](https://github.com/qq2675712416-ui/pdftoword/raw/refs/heads/main/PDF%E8%BD%ACWord-%E5%85%8D%E5%AE%89%E8%A3%85%E7%89%88.zip)，解压后双击 `PDF转Word.exe`。无需安装 Python 或打开命令行。压缩包包含程序和运行环境；转换完成后，点击“打开生成文件夹”即可到达 Word 文件所在位置。
 
+需要桌面快捷方式时，解压后右键 `PDF转Word.exe`，选择“显示更多选项”→“发送到”→“桌面快捷方式”。
+
 如暂时没有发布包，可在 Windows 上按下文从源码构建。
 
 ## 从源码运行

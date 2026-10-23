@@ -23,10 +23,9 @@ def copy_tree(source: Path, target: Path, ignore: set[str] | None = None) -> Non
 
 
 def create_icon(path: Path) -> None:
-    size = 32
-    pixels: list[list[tuple[int, int, int, int]]] = []
+    sizes = (16, 24, 32, 48, 64, 128, 256)
 
-    def inside_polygon(x: int, y: int, points: list[tuple[int, int]]) -> bool:
+    def inside_polygon(x: float, y: float, points: list[tuple[int, int]]) -> bool:
         inside = False
         j = len(points) - 1
         for i, (xi, yi) in enumerate(points):
@@ -36,43 +35,72 @@ def create_icon(path: Path) -> None:
             j = i
         return inside
 
-    page = [(8, 4), (20, 4), (25, 9), (25, 28), (8, 28)]
-    fold = [(20, 4), (20, 9), (25, 9)]
-    for y in range(size):
-        row = []
-        for x in range(size):
-            if not (7 <= x <= 24 and 7 <= y <= 24):
-                color = (0, 0, 0, 0)
-            else:
-                color = (235, 243, 255, 255)  # light blue tile, BGRA below
-                if inside_polygon(x, y, page):
-                    color = (255, 255, 255, 255)
-                if inside_polygon(x, y, fold):
-                    color = (201, 220, 255, 255)
-                if 11 <= x <= 21 and y in (13, 17, 21):
-                    color = (37, 99, 235, 255)
-                if 21 <= x <= 28 and 21 <= y <= 28:
-                    color = (37, 99, 235, 255)
-                if (x in (21, 28) and 21 <= y <= 28) or (y in (21, 28) and 21 <= x <= 28):
-                    color = (255, 255, 255, 255)
-            r, g, b, a = color
-            row.append((b, g, r, a))
-        pixels.append(row)
+    def color_at(x: float, y: float) -> tuple[int, int, int, int]:
+        # Flat square tile and crisp document/Word mark; deliberately no rounded corners.
+        color = (38, 91, 202, 255)
+        page = [(9, 6), (35, 6), (44, 15), (44, 57), (9, 57)]
+        if inside_polygon(x, y, page):
+            color = (255, 255, 255, 255)
+        if inside_polygon(x, y, [(35, 6), (35, 15), (44, 15)]):
+            color = (196, 218, 255, 255)
+        if inside_polygon(x, y, [(15, 23), (34, 23), (34, 26), (15, 26)]):
+            color = (83, 125, 196, 255)
+        if inside_polygon(x, y, [(15, 31), (34, 31), (34, 34), (15, 34)]):
+            color = (83, 125, 196, 255)
+        if inside_polygon(x, y, [(15, 39), (30, 39), (30, 42), (15, 42)]):
+            color = (83, 125, 196, 255)
+        if 34 <= x <= 58 and 34 <= y <= 58:
+            color = (13, 133, 112, 255)
+            # Blocky white W keeps its shape at 16 px and matches the square app style.
+            strokes = [((39, 41), (42, 53)), ((42, 53), (46, 46)),
+                       ((46, 46), (50, 53)), ((50, 53), (54, 41))]
+            if any(_distance_to_segment(x, y, start, end) <= 1.7 for start, end in strokes):
+                color = (255, 255, 255, 255)
+        return color
 
-    xor = b"".join(bytes(pixel) for row in reversed(pixels) for pixel in row)
-    mask = bytearray()
-    for row in reversed(pixels):
-        bits = bytearray(4)
-        for x, (_b, _g, _r, alpha) in enumerate(row):
-            if alpha == 0:
-                bits[x // 8] |= 1 << (7 - x % 8)
-        mask.extend(bits)
-    info = struct.pack("<IiiHHIIiiII", 40, size, size * 2, 1, 32, 0, len(xor), 0, 0, 0, 0)
-    image = info + xor + bytes(mask)
-    directory = struct.pack("<HHH", 0, 1, 1) + struct.pack(
-        "<BBBBHHII", size, size, 0, 0, 1, 32, len(image), 22
-    )
-    path.write_bytes(directory + image)
+    def _distance_to_segment(
+        x: float, y: float, start: tuple[int, int], end: tuple[int, int]
+    ) -> float:
+        dx, dy = end[0] - start[0], end[1] - start[1]
+        length_sq = dx * dx + dy * dy
+        t = max(0.0, min(1.0, ((x - start[0]) * dx + (y - start[1]) * dy) / length_sq))
+        return ((x - start[0] - t * dx) ** 2 + (y - start[1] - t * dy) ** 2) ** 0.5
+
+    frames: list[tuple[int, bytes]] = []
+    for size in sizes:
+        samples = 4
+        high_size = size * samples
+        pixels: list[list[tuple[int, int, int, int]]] = []
+        for y in range(size):
+            row = []
+            for x in range(size):
+                sums = [0, 0, 0, 0]
+                for sy in range(samples):
+                    for sx in range(samples):
+                        logical_x = (x * samples + sx + 0.5) * 64 / high_size
+                        logical_y = (y * samples + sy + 0.5) * 64 / high_size
+                        sample = color_at(logical_x, logical_y)
+                        for channel in range(4):
+                            sums[channel] += sample[channel]
+                row.append(tuple((value + samples * samples // 2) // (samples * samples) for value in sums))
+            pixels.append(row)
+
+        xor = b"".join(bytes((b, g, r, a)) for row in reversed(pixels) for r, g, b, a in row)
+        mask = bytes(((size + 31) // 32) * 4 * size)
+        info = struct.pack("<IiiHHIIiiII", 40, size, size * 2, 1, 32, 0, len(xor), 0, 0, 0, 0)
+        frames.append((size, info + xor + mask))
+
+    offset = 6 + 16 * len(frames)
+    entries = []
+    payload = bytearray()
+    for size, image in frames:
+        entries.append(struct.pack(
+            "<BBBBHHII", 0 if size == 256 else size, 0 if size == 256 else size,
+            0, 0, 1, 32, len(image), offset
+        ))
+        payload.extend(image)
+        offset += len(image)
+    path.write_bytes(struct.pack("<HHH", 0, 1, len(frames)) + b"".join(entries) + payload)
 
 
 def main() -> int:
@@ -156,6 +184,7 @@ def main() -> int:
         "5. 转换完成后，点击“打开生成文件夹”可直接到达 Word 文件。\n\n"
         "也可以把 PDF 文件拖到“PDF转Word.exe”上直接转换。\n"
         "程序已包含所需 Python 运行环境，不需要另装 Python 或依赖。\n"
+        "需要桌面快捷方式时，右键“PDF转Word.exe”，选择“显示更多选项”→“发送到”→“桌面快捷方式”。\n"
         "可编辑文字模式下正文、识别出的公式和表格可编辑，插图作为图片保留。\n"
         "外观保真模式会把每页存成图片，文字不能直接编辑。\n",
         encoding="utf-8",
