@@ -55,6 +55,18 @@ internal sealed class ConverterWindow : Form
         BackColor = Color.FromArgb(243, 246, 251);
         Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Regular);
 
+        string backgroundPath = Path.Combine(folder, "background.png");
+        if (File.Exists(backgroundPath))
+        {
+            try
+            {
+                using (Image source = Image.FromFile(backgroundPath))
+                    BackgroundImage = new Bitmap(source);
+                BackgroundImageLayout = ImageLayout.Zoom;
+            }
+            catch { }
+        }
+
         string iconPath = Path.Combine(folder, "app.ico");
         if (File.Exists(iconPath))
         {
@@ -64,6 +76,7 @@ internal sealed class ConverterWindow : Form
 
         TableLayoutPanel layout = new TableLayoutPanel();
         layout.Dock = DockStyle.Fill;
+        layout.BackColor = Color.Transparent;
         layout.Padding = new Padding(34, 24, 34, 22);
         layout.ColumnCount = 1;
         layout.RowCount = 4;
@@ -76,6 +89,7 @@ internal sealed class ConverterWindow : Form
 
         Panel header = new Panel();
         header.Dock = DockStyle.Fill;
+        header.BackColor = Color.Transparent;
         Label title = new Label();
         title.Text = "PDF 转 Word";
         title.Font = new Font("Microsoft YaHei UI", 23F, FontStyle.Bold);
@@ -104,7 +118,7 @@ internal sealed class ConverterWindow : Form
 
         dropPanel = new Panel();
         dropPanel.Dock = DockStyle.Fill;
-        dropPanel.BackColor = Color.White;
+        dropPanel.BackColor = Color.FromArgb(232, Color.White);
         dropPanel.BorderStyle = BorderStyle.FixedSingle;
         dropBadge = new Label();
         dropBadge.Text = "PDF";
@@ -128,12 +142,12 @@ internal sealed class ConverterWindow : Form
         chooseButton.Size = new Size(150, 42);
         chooseButton.FlatStyle = FlatStyle.Flat;
         chooseButton.FlatAppearance.BorderSize = 0;
-        chooseButton.BackColor = Color.FromArgb(37, 99, 235);
+        chooseButton.BackColor = Color.Black;
         chooseButton.ForeColor = Color.White;
         chooseButton.Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold);
         chooseButton.Cursor = Cursors.Hand;
         chooseButton.Padding = new Padding(5, 1, 5, 1);
-        chooseButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(29, 78, 216);
+        chooseButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(45, 45, 45);
         chooseButton.Click += ChooseFiles;
         dropPanel.Controls.Add(dropBadge);
         dropPanel.Controls.Add(dropTitle);
@@ -144,7 +158,7 @@ internal sealed class ConverterWindow : Form
 
         Panel settings = new Panel();
         settings.Dock = DockStyle.Fill;
-        settings.BackColor = Color.White;
+        settings.BackColor = Color.FromArgb(232, Color.White);
         settings.BorderStyle = BorderStyle.FixedSingle;
         layout.Controls.Add(settings, 0, 2);
         Label settingsTitle = MakeLabel("转换设置", 18, 15, 12F, true, Color.FromArgb(24, 34, 48));
@@ -188,8 +202,8 @@ internal sealed class ConverterWindow : Form
         folderButton.Size = new Size(116, 33);
         folderButton.FlatStyle = FlatStyle.Flat;
         folderButton.FlatAppearance.BorderSize = 0;
-        folderButton.BackColor = Color.FromArgb(235, 243, 255);
-        folderButton.ForeColor = Color.FromArgb(37, 99, 235);
+        folderButton.BackColor = Color.White;
+        folderButton.ForeColor = Color.Black;
         folderButton.Cursor = Cursors.Hand;
         folderButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         folderButton.Click += ChooseOutputFolder;
@@ -211,6 +225,7 @@ internal sealed class ConverterWindow : Form
 
         Panel footer = new Panel();
         footer.Dock = DockStyle.Fill;
+        footer.BackColor = Color.Transparent;
         progress = new ProgressBar();
         progress.Location = new Point(0, 4);
         progress.Size = new Size(710, 12);
@@ -236,7 +251,7 @@ internal sealed class ConverterWindow : Form
         openOutputButton.FlatStyle = FlatStyle.Flat;
         openOutputButton.FlatAppearance.BorderColor = Color.FromArgb(211, 222, 238);
         openOutputButton.BackColor = Color.White;
-        openOutputButton.ForeColor = Color.FromArgb(37, 99, 235);
+        openOutputButton.ForeColor = Color.Black;
         openOutputButton.Cursor = Cursors.Hand;
         openOutputButton.Click += OpenGeneratedFile;
         footer.Controls.Add(openOutputButton);

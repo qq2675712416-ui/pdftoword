@@ -92,7 +92,7 @@ class PdfWordApp:
         self.drop_hint.bind("<Button-1>", lambda _event: self.choose_files())
         self.choose_button = tk.Button(
             self.drop_area, text="选择 PDF 文件", command=self.choose_files,
-            bg=self.BLUE, fg="white", activebackground="#1D4ED8", activeforeground="white",
+            bg="black", fg="white", activebackground="#2D2D2D", activeforeground="white",
             relief="flat", borderwidth=0, padx=22, pady=10,
             font=("Microsoft YaHei UI", 10, "bold"), cursor="hand2",
         )

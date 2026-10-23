@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shutil
 import os
-import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -20,87 +19,6 @@ RUNTIME = PACKAGE / "runtime"
 
 def copy_tree(source: Path, target: Path, ignore: set[str] | None = None) -> None:
     shutil.copytree(source, target, ignore=shutil.ignore_patterns(*(ignore or set())))
-
-
-def create_icon(path: Path) -> None:
-    sizes = (16, 24, 32, 48, 64, 128, 256)
-
-    def inside_polygon(x: float, y: float, points: list[tuple[int, int]]) -> bool:
-        inside = False
-        j = len(points) - 1
-        for i, (xi, yi) in enumerate(points):
-            xj, yj = points[j]
-            if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
-                inside = not inside
-            j = i
-        return inside
-
-    def color_at(x: float, y: float) -> tuple[int, int, int, int]:
-        # Flat square tile and crisp document/Word mark; deliberately no rounded corners.
-        color = (38, 91, 202, 255)
-        page = [(9, 6), (35, 6), (44, 15), (44, 57), (9, 57)]
-        if inside_polygon(x, y, page):
-            color = (255, 255, 255, 255)
-        if inside_polygon(x, y, [(35, 6), (35, 15), (44, 15)]):
-            color = (196, 218, 255, 255)
-        if inside_polygon(x, y, [(15, 23), (34, 23), (34, 26), (15, 26)]):
-            color = (83, 125, 196, 255)
-        if inside_polygon(x, y, [(15, 31), (34, 31), (34, 34), (15, 34)]):
-            color = (83, 125, 196, 255)
-        if inside_polygon(x, y, [(15, 39), (30, 39), (30, 42), (15, 42)]):
-            color = (83, 125, 196, 255)
-        if 34 <= x <= 58 and 34 <= y <= 58:
-            color = (13, 133, 112, 255)
-            # Blocky white W keeps its shape at 16 px and matches the square app style.
-            strokes = [((39, 41), (42, 53)), ((42, 53), (46, 46)),
-                       ((46, 46), (50, 53)), ((50, 53), (54, 41))]
-            if any(_distance_to_segment(x, y, start, end) <= 1.7 for start, end in strokes):
-                color = (255, 255, 255, 255)
-        return color
-
-    def _distance_to_segment(
-        x: float, y: float, start: tuple[int, int], end: tuple[int, int]
-    ) -> float:
-        dx, dy = end[0] - start[0], end[1] - start[1]
-        length_sq = dx * dx + dy * dy
-        t = max(0.0, min(1.0, ((x - start[0]) * dx + (y - start[1]) * dy) / length_sq))
-        return ((x - start[0] - t * dx) ** 2 + (y - start[1] - t * dy) ** 2) ** 0.5
-
-    frames: list[tuple[int, bytes]] = []
-    for size in sizes:
-        samples = 4
-        high_size = size * samples
-        pixels: list[list[tuple[int, int, int, int]]] = []
-        for y in range(size):
-            row = []
-            for x in range(size):
-                sums = [0, 0, 0, 0]
-                for sy in range(samples):
-                    for sx in range(samples):
-                        logical_x = (x * samples + sx + 0.5) * 64 / high_size
-                        logical_y = (y * samples + sy + 0.5) * 64 / high_size
-                        sample = color_at(logical_x, logical_y)
-                        for channel in range(4):
-                            sums[channel] += sample[channel]
-                row.append(tuple((value + samples * samples // 2) // (samples * samples) for value in sums))
-            pixels.append(row)
-
-        xor = b"".join(bytes((b, g, r, a)) for row in reversed(pixels) for r, g, b, a in row)
-        mask = bytes(((size + 31) // 32) * 4 * size)
-        info = struct.pack("<IiiHHIIiiII", 40, size, size * 2, 1, 32, 0, len(xor), 0, 0, 0, 0)
-        frames.append((size, info + xor + mask))
-
-    offset = 6 + 16 * len(frames)
-    entries = []
-    payload = bytearray()
-    for size, image in frames:
-        entries.append(struct.pack(
-            "<BBBBHHII", 0 if size == 256 else size, 0 if size == 256 else size,
-            0, 0, 1, 32, len(image), offset
-        ))
-        payload.extend(image)
-        offset += len(image)
-    path.write_bytes(struct.pack("<HHH", 0, 1, len(frames)) + b"".join(entries) + payload)
 
 
 def main() -> int:
@@ -159,8 +77,8 @@ def main() -> int:
 
     shutil.copy2(ROOT / "main.py", PACKAGE / "main.py")
     icon = ROOT / "app.ico"
-    create_icon(icon)
     shutil.copy2(icon, PACKAGE / icon.name)
+    shutil.copy2(ROOT / "background.png", PACKAGE / "background.png")
     shutil.copy2(base / "LICENSE.txt", PACKAGE / "Python-LICENSE.txt")
     framework = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Microsoft.NET" / "Framework64" / "v4.0.30319" / "csc.exe"
     if not framework.is_file():
@@ -185,6 +103,7 @@ def main() -> int:
         "也可以把 PDF 文件拖到“PDF转Word.exe”上直接转换。\n"
         "程序已包含所需 Python 运行环境，不需要另装 Python 或依赖。\n"
         "需要桌面快捷方式时，右键“PDF转Word.exe”，选择“显示更多选项”→“发送到”→“桌面快捷方式”。\n"
+        "程序图标和窗口背景采用随包附带的设计图片。\n"
         "可编辑文字模式下正文、识别出的公式和表格可编辑，插图作为图片保留。\n"
         "外观保真模式会把每页存成图片，文字不能直接编辑。\n",
         encoding="utf-8",

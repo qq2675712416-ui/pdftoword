@@ -20,3 +20,5 @@ test*
 
 # Local preview and review images
 *.png
+!background.png
+!app-icon-source.png
