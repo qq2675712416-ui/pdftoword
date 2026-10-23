@@ -32,6 +32,7 @@ class PdfWordApp:
         self._drop_callbacks = []
         self._old_wndprocs = []
         self.output_folder = ""
+        self.last_generated_file: Path | None = None
         self.output_dir = tk.StringVar(value="与 PDF 同文件夹（默认）")
         self.mode = tk.StringVar(value="可编辑文字")
         self.dpi = tk.StringVar(value="300")
@@ -141,11 +142,17 @@ class PdfWordApp:
         progress_card.pack(fill="x", pady=(18, 0))
         self.progress = ttk.Progressbar(progress_card, mode="determinate", maximum=1, value=0)
         self.progress.pack(fill="x")
-        tk.Label(progress_card, textvariable=self.status, bg=self.BG, fg=self.MUTED,
-                 font=("Microsoft YaHei UI", 9), anchor="w").pack(fill="x", pady=(9, 0))
+        status_row = tk.Frame(progress_card, bg=self.BG)
+        status_row.pack(fill="x", pady=(9, 0))
+        tk.Label(status_row, textvariable=self.status, bg=self.BG, fg=self.MUTED,
+                 font=("Microsoft YaHei UI", 9), anchor="w").pack(side="left", fill="x", expand=True)
+        self.open_output_button = ttk.Button(
+            status_row, text="打开生成文件夹", command=self.open_generated_folder, state="disabled",
+        )
+        self.open_output_button.pack(side="right", padx=(10, 0))
 
         tk.Label(
-            page, text="可编辑模式适合继续修改；复杂版式和扫描件可能需要后续整理。",
+            page, text="正文与表格可编辑；复杂公式保留为高清图片。",
             bg=self.BG, fg="#98A2B3", font=("Microsoft YaHei UI", 9),
         ).pack(anchor="w", side="bottom", pady=(18, 0))
 
@@ -166,6 +173,10 @@ class PdfWordApp:
         self.output_folder = ""
         self.output_dir.set("与 PDF 同文件夹（默认）")
         self.status.set("已恢复默认：每个 Word 文件保存到对应 PDF 所在文件夹。")
+
+    def open_generated_folder(self) -> None:
+        if self.last_generated_file and self.last_generated_file.is_file():
+            os.startfile(str(self.last_generated_file.parent))
 
     def _enable_native_drop(self) -> None:
         """Register the top-level window and its child widgets for Explorer drops."""
@@ -303,6 +314,9 @@ class PdfWordApp:
                     completed, failures = data
                     self.busy = False
                     self.choose_button.configure(state="normal", text="选择 PDF 文件")
+                    if completed:
+                        self.last_generated_file = completed[-1]
+                        self.open_output_button.configure(state="normal")
                     if completed and not failures:
                         self.status.set(f"转换完成 · 共生成 {len(completed)} 个 Word 文件")
                         messagebox.showinfo("转换完成", "已生成文件：\n\n" + "\n".join(map(str, completed)), parent=self.root)

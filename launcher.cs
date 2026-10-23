@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
@@ -16,101 +15,6 @@ internal static class Launcher
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new ConverterWindow(args));
-    }
-}
-
-internal sealed class RoundedPanel : Panel
-{
-    internal int CornerRadius = 18;
-    internal Color BorderColor = Color.FromArgb(225, 231, 239);
-
-    internal RoundedPanel()
-    {
-        DoubleBuffered = true;
-        BackColor = Color.White;
-        Resize += delegate { UpdateShape(); Invalidate(); };
-    }
-
-    private void UpdateShape()
-    {
-        if (Width < 2 || Height < 2) return;
-        using (GraphicsPath path = RoundedPath(new Rectangle(0, 0, Width - 1, Height - 1), CornerRadius))
-        {
-            Region old = Region;
-            Region = new Region(path);
-            if (old != null) old.Dispose();
-        }
-    }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        Rectangle bounds = new Rectangle(0, 0, Width - 1, Height - 1);
-        using (GraphicsPath path = RoundedPath(bounds, CornerRadius))
-        using (Pen border = new Pen(BorderColor, 1F))
-            e.Graphics.DrawPath(border, path);
-    }
-
-    internal static GraphicsPath RoundedPath(Rectangle bounds, int radius)
-    {
-        GraphicsPath path = new GraphicsPath();
-        int diameter = Math.Max(2, Math.Min(radius * 2, Math.Min(bounds.Width, bounds.Height)));
-        Rectangle arc = new Rectangle(bounds.X, bounds.Y, diameter, diameter);
-        path.AddArc(arc, 180, 90);
-        arc.X = bounds.Right - diameter;
-        path.AddArc(arc, 270, 90);
-        arc.Y = bounds.Bottom - diameter;
-        path.AddArc(arc, 0, 90);
-        arc.X = bounds.X;
-        path.AddArc(arc, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
-}
-
-internal sealed class RoundedButton : Button
-{
-    internal int CornerRadius = 11;
-
-    internal RoundedButton()
-    {
-        FlatStyle = FlatStyle.Flat;
-        FlatAppearance.BorderSize = 0;
-        UseVisualStyleBackColor = false;
-        Resize += delegate { UpdateShape(); };
-    }
-
-    private void UpdateShape()
-    {
-        if (Width < 2 || Height < 2) return;
-        using (GraphicsPath path = RoundedPanel.RoundedPath(new Rectangle(0, 0, Width - 1, Height - 1), CornerRadius))
-        {
-            Region old = Region;
-            Region = new Region(path);
-            if (old != null) old.Dispose();
-        }
-    }
-}
-
-internal sealed class RoundedLabel : Label
-{
-    internal int CornerRadius = 12;
-
-    internal RoundedLabel()
-    {
-        Resize += delegate { UpdateShape(); };
-    }
-
-    private void UpdateShape()
-    {
-        if (Width < 2 || Height < 2) return;
-        using (GraphicsPath path = RoundedPanel.RoundedPath(new Rectangle(0, 0, Width - 1, Height - 1), CornerRadius))
-        {
-            Region old = Region;
-            Region = new Region(path);
-            if (old != null) old.Dispose();
-        }
     }
 }
 
@@ -133,8 +37,10 @@ internal sealed class ConverterWindow : Form
     private readonly Label status;
     private readonly Button folderButton;
     private readonly Button resetButton;
+    private readonly Button openOutputButton;
     private readonly BackgroundWorker worker;
     private string outputFolder = "";
+    private string lastGeneratedFile = "";
 
     internal ConverterWindow(string[] args)
     {
@@ -184,8 +90,8 @@ internal sealed class ConverterWindow : Form
         subtitle.AutoSize = true;
         subtitle.Location = new Point(2, 43);
         header.Controls.Add(subtitle);
-        RoundedLabel privacy = new RoundedLabel();
-        privacy.Text = "●  本地转换 · 文件不上传";
+        Label privacy = new Label();
+        privacy.Text = "本地转换 · 文件不上传";
         privacy.TextAlign = ContentAlignment.MiddleCenter;
         privacy.Font = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
         privacy.ForeColor = Color.FromArgb(29, 118, 83);
@@ -196,12 +102,11 @@ internal sealed class ConverterWindow : Form
         header.Controls.Add(privacy);
         layout.Controls.Add(header, 0, 0);
 
-        dropPanel = new RoundedPanel();
+        dropPanel = new Panel();
         dropPanel.Dock = DockStyle.Fill;
         dropPanel.BackColor = Color.White;
-        ((RoundedPanel)dropPanel).CornerRadius = 22;
-        ((RoundedPanel)dropPanel).BorderColor = Color.FromArgb(211, 222, 238);
-        dropBadge = new RoundedLabel();
+        dropPanel.BorderStyle = BorderStyle.FixedSingle;
+        dropBadge = new Label();
         dropBadge.Text = "PDF";
         dropBadge.TextAlign = ContentAlignment.MiddleCenter;
         dropBadge.Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold);
@@ -218,7 +123,7 @@ internal sealed class ConverterWindow : Form
         dropHint.Font = new Font("Microsoft YaHei UI", 9F);
         dropHint.ForeColor = Color.FromArgb(102, 112, 133);
         dropHint.AutoSize = true;
-        chooseButton = new RoundedButton();
+        chooseButton = new Button();
         chooseButton.Text = "选择 PDF 文件";
         chooseButton.Size = new Size(150, 42);
         chooseButton.FlatStyle = FlatStyle.Flat;
@@ -237,10 +142,10 @@ internal sealed class ConverterWindow : Form
         dropPanel.Resize += CenterDropControls;
         layout.Controls.Add(dropPanel, 0, 1);
 
-        Panel settings = new RoundedPanel();
+        Panel settings = new Panel();
         settings.Dock = DockStyle.Fill;
         settings.BackColor = Color.White;
-        ((RoundedPanel)settings).CornerRadius = 18;
+        settings.BorderStyle = BorderStyle.FixedSingle;
         layout.Controls.Add(settings, 0, 2);
         Label settingsTitle = MakeLabel("转换设置", 18, 15, 12F, true, Color.FromArgb(24, 34, 48));
         settings.Controls.Add(settingsTitle);
@@ -317,10 +222,24 @@ internal sealed class ConverterWindow : Form
             Color.FromArgb(102, 112, 133));
         status.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         status.AutoEllipsis = true;
+        status.Size = new Size(520, status.Height);
         footer.Controls.Add(status);
-        Label note = MakeLabel("可编辑模式适合继续修改；复杂版式和扫描件可能需要后续整理。", 1, 49,
+        Label note = MakeLabel("正文与表格可编辑；复杂公式保留为高清图片。", 1, 49,
             8.5F, false, Color.FromArgb(152, 162, 179));
         footer.Controls.Add(note);
+        openOutputButton = new Button();
+        openOutputButton.Text = "打开生成文件夹";
+        openOutputButton.Location = new Point(548, 24);
+        openOutputButton.Size = new Size(150, 31);
+        openOutputButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        openOutputButton.Enabled = false;
+        openOutputButton.FlatStyle = FlatStyle.Flat;
+        openOutputButton.FlatAppearance.BorderColor = Color.FromArgb(211, 222, 238);
+        openOutputButton.BackColor = Color.White;
+        openOutputButton.ForeColor = Color.FromArgb(37, 99, 235);
+        openOutputButton.Cursor = Cursors.Hand;
+        openOutputButton.Click += OpenGeneratedFile;
+        footer.Controls.Add(openOutputButton);
         layout.Controls.Add(footer, 0, 3);
 
         worker = new BackgroundWorker();
@@ -421,6 +340,18 @@ internal sealed class ConverterWindow : Form
             BeginConversion(files);
     }
 
+    private void OpenGeneratedFile(object sender, EventArgs e)
+    {
+        if (String.IsNullOrEmpty(lastGeneratedFile) || !File.Exists(lastGeneratedFile))
+            return;
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            Arguments = "/select,\"" + lastGeneratedFile + "\"",
+            UseShellExecute = true
+        });
+    }
+
     private void BeginConversion(string[] paths)
     {
         if (worker.IsBusy)
@@ -451,6 +382,7 @@ internal sealed class ConverterWindow : Form
         folderButton.Enabled = false;
         resetButton.Enabled = false;
         chooseButton.Enabled = false;
+        openOutputButton.Enabled = false;
         chooseButton.Text = "正在转换…";
         progress.Value = 0;
         progress.Maximum = pdfs.Count;
@@ -526,6 +458,11 @@ internal sealed class ConverterWindow : Form
             return;
         }
         Result result = (Result)e.Result;
+        if (result.Completed.Count > 0)
+        {
+            lastGeneratedFile = result.Completed[result.Completed.Count - 1];
+            openOutputButton.Enabled = true;
+        }
         if (result.Completed.Count > 0 && result.Failures.Count == 0)
         {
             status.Text = "转换完成 · 共生成 " + result.Completed.Count + " 个 Word 文件";

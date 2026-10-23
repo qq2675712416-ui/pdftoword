@@ -41,8 +41,7 @@ def create_icon(path: Path) -> None:
     for y in range(size):
         row = []
         for x in range(size):
-            dx, dy = max(7 - x, 0, x - 24), max(7 - y, 0, y - 24)
-            if dx * dx + dy * dy > 25:
+            if not (7 <= x <= 24 and 7 <= y <= 24):
                 color = (0, 0, 0, 0)
             else:
                 color = (235, 243, 255, 255)  # light blue tile, BGRA below
@@ -154,8 +153,10 @@ def main() -> int:
         "2. 双击“PDF转Word.exe”。\n"
         "3. 把 PDF 拖进窗口，或点击“选择 PDF”。\n"
         "4. 选择输出文件夹；默认生成的 Word 保存在 PDF 所在文件夹。\n\n"
+        "5. 转换完成后，点击“打开生成文件夹”可直接到达 Word 文件。\n\n"
         "也可以把 PDF 文件拖到“PDF转Word.exe”上直接转换。\n"
         "程序已包含所需 Python 运行环境，不需要另装 Python 或依赖。\n"
+        "可编辑文字模式下正文和表格可编辑，复杂公式以高清图片保留原排版。\n"
         "外观保真模式会把每页存成图片，文字不能直接编辑。\n",
         encoding="utf-8",
     )

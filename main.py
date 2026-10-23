@@ -28,6 +28,7 @@ from docx.oxml.ns import qn
 
 LOGGER = logging.getLogger("pdf_to_word")
 EDITABLE_TOP_MARGIN_PT = 36.0  # Leave room for a Word header while preserving PDF page coordinates.
+EDITABLE_VERTICAL_GAP_SCALE = 0.5
 
 # Common PDF font names mapped to fonts likely to exist in Microsoft Word.
 FONT_MAP = {
@@ -252,7 +253,7 @@ def _add_math_line(
     paragraph.paragraph_format.left_indent = Inches(
         max(0.0, x0) / 72 if alignment == WD_ALIGN_PARAGRAPH.LEFT else 0
     )
-    paragraph.paragraph_format.space_before = Pt(max(0.0, y0 - previous_bottom))
+    paragraph.paragraph_format.space_before = Pt(max(0.0, y0 - previous_bottom) * EDITABLE_VERTICAL_GAP_SCALE)
     paragraph.paragraph_format.space_after = Pt(0)
     paragraph.paragraph_format.line_spacing = Pt(max(1.0, y1 - y0))
     equation = OxmlElement("m:oMath")
@@ -417,12 +418,25 @@ def _add_pdf_image(document: Document, block: dict[str, Any], previous_bottom: f
     height = float(y1 - y0)
     paragraph = document.add_paragraph()
     paragraph.paragraph_format.left_indent = Inches(max(0.0, float(x0)) / 72)
-    paragraph.paragraph_format.space_before = Pt(max(0.0, float(y0) - previous_bottom))
+    paragraph.paragraph_format.space_before = Pt(max(0.0, float(y0) - previous_bottom) * EDITABLE_VERTICAL_GAP_SCALE)
     paragraph.paragraph_format.space_after = Pt(0)
     paragraph.paragraph_format.line_spacing = Pt(max(1.0, height))
     inline = paragraph.add_run().add_picture(BytesIO(block["image"]), width=Inches(width / 72))
     inline.height = Inches(height / 72)
     return max(previous_bottom, float(y1))
+
+
+def _add_pdf_equation(document: Document, page: fitz.Page, line: dict[str, Any], previous_bottom: float) -> float:
+    """Keep complex PDF equation layout intact as a high-resolution inline crop."""
+    bounds = fitz.Rect(line["bbox"])
+    crop = fitz.Rect(
+        max(0, bounds.x0 - 1), max(0, bounds.y0 - 1),
+        min(page.rect.width, bounds.x1 + 1), min(page.rect.height, bounds.y1 + 1),
+    )
+    pixmap = page.get_pixmap(matrix=fitz.Matrix(3, 3), clip=crop, alpha=False)
+    image = BytesIO(pixmap.tobytes("png"))
+    block = {"bbox": tuple(crop), "image": image.getvalue()}
+    return _add_pdf_image(document, block, previous_bottom, page.rect.width)
 
 
 def _vector_figure(page: fitz.Page) -> tuple[fitz.Rect, dict[str, Any]] | None:
@@ -452,7 +466,7 @@ def _add_pdf_rule(document: Document, rule: fitz.Rect, previous_bottom: float, p
     paragraph = document.add_paragraph()
     paragraph.paragraph_format.left_indent = Inches(max(0.0, rule.x0) / 72)
     paragraph.paragraph_format.right_indent = Inches(max(0.0, page_width - rule.x1) / 72)
-    paragraph.paragraph_format.space_before = Pt(max(0.0, rule.y0 - previous_bottom))
+    paragraph.paragraph_format.space_before = Pt(max(0.0, rule.y0 - previous_bottom) * EDITABLE_VERTICAL_GAP_SCALE)
     paragraph.paragraph_format.space_after = Pt(0)
     paragraph.paragraph_format.line_spacing = Pt(max(1.0, rule.height))
     paragraph.add_run(" ").font.size = Pt(1)
@@ -484,7 +498,7 @@ def _heading_style(line: dict[str, Any]) -> str | None:
 def _extract_toc_entries(pdf: fitz.Document) -> list[tuple[int, str, str, int]]:
     entries: list[tuple[int, str, str, int]] = []
     in_toc = False
-    pattern = re.compile(r"^(.*?)\s*[.．。·…]{2,}\s*(\d{1,3})\s*$")
+    pattern = re.compile(r"^(.*?)\s*[.．。·…]{2,}\s*(\d{1,3}|[IVX]{1,4})\s*$", re.IGNORECASE)
     for page in pdf:
         lines = [
             line
@@ -571,10 +585,9 @@ def _configure_toc_styles(document: Document) -> None:
         style.paragraph_format.left_indent = Pt(left_indent)
         style.paragraph_format.right_indent = Pt(105)
         style.paragraph_format.space_before = Pt(0)
-        # The PDF's TOC rows are spaced about 42 pt apart. Keep that
-        # vertical rhythm so the cached entries occupy the same two pages.
-        style.paragraph_format.space_after = Pt(24)
-        style.paragraph_format.line_spacing = 1.15
+        # Match the compact single-page contents list in the source PDF.
+        style.paragraph_format.space_after = Pt(0)
+        style.paragraph_format.line_spacing = 1.0
         style.paragraph_format.tab_stops.add_tab_stop(Pt(490), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS)
 
 
@@ -605,7 +618,7 @@ def _add_line(
             paragraph.style = style_name
     x0, y0, _x1, y1 = line["bbox"]
     paragraph.paragraph_format.left_indent = Inches(max(0.0, x0) / 72)
-    paragraph.paragraph_format.space_before = Pt(max(0.0, y0 - previous_bottom))
+    paragraph.paragraph_format.space_before = Pt(max(0.0, y0 - previous_bottom) * EDITABLE_VERTICAL_GAP_SCALE)
     paragraph.paragraph_format.space_after = Pt(0)
     paragraph.paragraph_format.line_spacing = Pt(max(1.0, y1 - y0))
 
@@ -692,6 +705,7 @@ def _add_pdf_table(
 ) -> float:
     """Create an editable Word table from a detected PDF table and its text spans."""
     x0, y0, x1, y1 = table_data.bbox
+    table_font_scale = 0.8 if y0 > page.rect.height * 0.75 else 0.9
     column_edges = _table_column_edges(table_data)
     column_count = len(column_edges) - 1
     if column_count < 1:
@@ -705,6 +719,13 @@ def _add_pdf_table(
     table_width = word_table._tbl.tblPr.find(qn("w:tblW"))
     table_width.set(qn("w:type"), "dxa")
     table_width.set(qn("w:w"), str(total_width_twips))
+    cell_margins = OxmlElement("w:tblCellMar")
+    for edge, value in (("top", 0), ("left", 30), ("bottom", 0), ("right", 30)):
+        margin = OxmlElement(f"w:{edge}")
+        margin.set(qn("w:w"), str(value))
+        margin.set(qn("w:type"), "dxa")
+        cell_margins.append(margin)
+    word_table._tbl.tblPr.append(cell_margins)
     tbl_ind = OxmlElement("w:tblInd")
     tbl_ind.set(qn("w:w"), str(round(x0 * 20)))
     tbl_ind.set(qn("w:type"), "dxa")
@@ -720,7 +741,7 @@ def _add_pdf_table(
         row_bounds.append((row_top, row_bottom))
         word_row = word_table.rows[row_index]
         word_row.height = Pt(max(1, row_bottom - row_top))
-        word_row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
+        word_row.height_rule = WD_ROW_HEIGHT_RULE.EXACTLY
 
         # Merge cells where the PDF cell spans more than one logical column.
         for box in boxes:
@@ -794,7 +815,9 @@ def _add_pdf_table(
                 else:
                     paragraph = word_table.cell(row_index, col_index).paragraphs[0]
                     cell_paragraphs[key] = (paragraph, sy0)
-                _format_run(paragraph.add_run(text), span, _span_is_underlined(span, horizontal_marks))
+                run = paragraph.add_run(text)
+                _format_run(run, span, _span_is_underlined(span, horizontal_marks))
+                run.font.size = Pt(max(5.0, run.font.size.pt * table_font_scale))
     if getattr(table_data, "_three_line", False):
         _apply_three_line_style(word_table)
     return float(y1)
@@ -879,11 +902,17 @@ def pdf_to_word(pdf_path: str | Path, word_path: str | Path) -> Path:
             for text_line in page_lines:
                 line_box = fitz.Rect(text_line["bbox"])
                 normalized_text = re.sub(r"\s+", "", _line_text(text_line))
+                if (
+                    re.fullmatch(r"(?:\d{1,3}|[IVX]{1,4})", normalized_text, re.IGNORECASE)
+                    and line_box.y0 > page.rect.height - 70
+                    and abs((line_box.x0 + line_box.x1) / 2 - page.rect.width / 2) < 45
+                ):
+                    continue  # Skip centered page numbers in the PDF footer.
                 if normalized_text == "目录":
                     toc_active = True
                     page_has_toc_title = True
                 elif toc_active:
-                    if "…" in normalized_text or re.fullmatch(r"\d+", normalized_text):
+                    if re.search(r"[.．。·…]{2,}\s*(?:\d{1,3}|[IVX]{1,4})$", _line_text(text_line), re.IGNORECASE):
                         page_has_toc_entries = True
                         continue  # Replace static PDF contents entries with the Word TOC field.
                     toc_active = False
@@ -932,7 +961,7 @@ def pdf_to_word(pdf_path: str | Path, word_path: str | Path) -> Path:
                     if text_norm == "目录":
                         _add_toc_field(document, toc_entries)
                 elif kind == "math":
-                    previous_bottom = _add_math_line(document, item, previous_bottom, horizontal_marks)
+                    previous_bottom = _add_pdf_equation(document, page, item, previous_bottom)
                 elif kind == "image":
                     previous_bottom = _add_pdf_image(document, item, previous_bottom, page.rect.width)
                 elif kind == "rule":
@@ -944,7 +973,7 @@ def pdf_to_word(pdf_path: str | Path, word_path: str | Path) -> Path:
                         spacer = document.add_paragraph()
                         spacer.paragraph_format.space_before = Pt(0)
                         spacer.paragraph_format.space_after = Pt(0)
-                        spacer.paragraph_format.line_spacing = Pt(gap)
+                        spacer.paragraph_format.line_spacing = Pt(gap * EDITABLE_VERTICAL_GAP_SCALE)
                         spacer.add_run(" ").font.size = Pt(1)
                     previous_bottom = _add_pdf_table(document, item, page, horizontal_marks)
             if page_number < len(pdf):
@@ -953,7 +982,7 @@ def pdf_to_word(pdf_path: str | Path, word_path: str | Path) -> Path:
                     abs(page.rect.width - next_page.rect.width) > 1
                     or abs(page.rect.height - next_page.rect.height) > 1
                 )
-                preserve_toc_flow = page_has_toc_entries and not page_has_toc_title
+                preserve_toc_flow = page_has_toc_entries
                 if size_changes:
                     section = document.add_section(WD_SECTION_START.NEW_PAGE)
                     section.page_width = Inches(next_page.rect.width / 72)
