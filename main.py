@@ -124,7 +124,7 @@ def _is_equation_line(line: dict[str, Any]) -> bool:
     )
     text = "".join(span.get("text", "") for span in spans)
     has_operator = any(symbol in text for symbol in "=≈≠≤≥±∑∫√")
-    return math_chars >= 2 and total > 0 and (math_chars / total >= 0.34 or has_operator)
+    return math_chars >= 1 and total > 0 and (math_chars / total >= 0.25 or has_operator)
 
 
 def _merge_equation_lines(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -139,7 +139,8 @@ def _merge_equation_lines(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
             vertical_overlap = max(0.0, min(rect.y1, group_rect.y1) - max(rect.y0, group_rect.y0))
             min_height = max(1.0, min(rect.height, group_rect.height))
             horizontal_gap = max(0.0, max(rect.x0, group_rect.x0) - min(rect.x1, group_rect.x1))
-            if vertical_overlap / min_height >= 0.22 and horizontal_gap <= 18:
+            center_delta = abs((rect.y0 + rect.y1) / 2 - (group_rect.y0 + group_rect.y1) / 2)
+            if vertical_overlap / min_height >= 0.6 and center_delta <= 9 and horizontal_gap <= 18:
                 target = group
                 break
         if target is None:
@@ -150,6 +151,54 @@ def _merge_equation_lines(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
             target["bbox"] = tuple(fitz.Rect(target["bbox"]).include_rect(rect))
     for group in groups:
         group["spans"].sort(key=lambda span: (span["bbox"][0], span["bbox"][1]))
+    return groups
+
+
+def _merge_fraction_groups(groups: list[dict[str, Any]], marks: list[fitz.Rect]) -> list[dict[str, Any]]:
+    """Join PDF text fragments arranged around a fraction or radical bar."""
+    for mark in marks:
+        if mark.width < 7 or mark.width > 180:
+            continue
+        above: list[tuple[float, dict[str, Any]]] = []
+        below: list[tuple[float, dict[str, Any]]] = []
+        for group in groups:
+            relevant = [
+                span for span in group["spans"]
+                if mark.x0 - 3 <= (span["bbox"][0] + span["bbox"][2]) / 2 <= mark.x1 + 3
+            ]
+            if not relevant:
+                continue
+            centers = [(span["bbox"][1] + span["bbox"][3]) / 2 for span in relevant]
+            upper = [center for center in centers if center < mark.y0]
+            lower = [center for center in centers if center > mark.y1]
+            if upper:
+                distance = mark.y0 - max(upper)
+                if distance <= 22:
+                    above.append((distance, group))
+            if lower:
+                distance = min(lower) - mark.y1
+                if distance <= 22:
+                    below.append((distance, group))
+        if not above or not below:
+            continue
+        selected = {id(min(above, key=lambda item: item[0])[1]): min(above, key=lambda item: item[0])[1]}
+        selected.update({id(min(below, key=lambda item: item[0])[1]): min(below, key=lambda item: item[0])[1]})
+        for group in groups:
+            rect = fitz.Rect(group["bbox"])
+            center_y = (rect.y0 + rect.y1) / 2
+            gap = mark.x0 - rect.x1 if rect.x1 <= mark.x0 else rect.x0 - mark.x1
+            if 0 <= gap <= 8 and abs(center_y - (mark.y0 + mark.y1) / 2) <= 14:
+                selected[id(group)] = group
+        if len(selected) < 2:
+            continue
+        merged = list(selected.values())
+        target = merged[0]
+        for group in merged[1:]:
+            target["spans"].extend(group["spans"])
+            target["_lines"].extend(group.get("_lines", []))
+            target["bbox"] = tuple(fitz.Rect(target["bbox"]).include_rect(fitz.Rect(group["bbox"])))
+            groups.remove(group)
+        target["spans"].sort(key=lambda span: (span["bbox"][0], span["bbox"][1]))
     return groups
 
 
@@ -255,7 +304,6 @@ def _add_math_line(
     )
     paragraph.paragraph_format.space_before = Pt(max(0.0, y0 - previous_bottom) * EDITABLE_VERTICAL_GAP_SCALE)
     paragraph.paragraph_format.space_after = Pt(0)
-    paragraph.paragraph_format.line_spacing = Pt(max(1.0, y1 - y0))
     equation = OxmlElement("m:oMath")
     spans = line["spans"]
     rect = fitz.Rect(line["bbox"])
@@ -263,7 +311,7 @@ def _add_math_line(
         (
             mark
             for mark in horizontal_marks
-            if 7 <= mark.width <= min(90, rect.width * 0.28)
+            if 7 <= mark.width <= min(180, rect.width * 0.9)
             and rect.y0 - 1 <= mark.y0 <= rect.y1 + 1
         ),
         None,
@@ -424,19 +472,6 @@ def _add_pdf_image(document: Document, block: dict[str, Any], previous_bottom: f
     inline = paragraph.add_run().add_picture(BytesIO(block["image"]), width=Inches(width / 72))
     inline.height = Inches(height / 72)
     return max(previous_bottom, float(y1))
-
-
-def _add_pdf_equation(document: Document, page: fitz.Page, line: dict[str, Any], previous_bottom: float) -> float:
-    """Keep complex PDF equation layout intact as a high-resolution inline crop."""
-    bounds = fitz.Rect(line["bbox"])
-    crop = fitz.Rect(
-        max(0, bounds.x0 - 1), max(0, bounds.y0 - 1),
-        min(page.rect.width, bounds.x1 + 1), min(page.rect.height, bounds.y1 + 1),
-    )
-    pixmap = page.get_pixmap(matrix=fitz.Matrix(3, 3), clip=crop, alpha=False)
-    image = BytesIO(pixmap.tobytes("png"))
-    block = {"bbox": tuple(crop), "image": image.getvalue()}
-    return _add_pdf_image(document, block, previous_bottom, page.rect.width)
 
 
 def _vector_figure(page: fitz.Page) -> tuple[fitz.Rect, dict[str, Any]] | None:
@@ -891,6 +926,7 @@ def pdf_to_word(pdf_path: str | Path, word_path: str | Path) -> Path:
                     )) for rect in table_rects + vector_rects)
                 ]
             )
+            equation_groups = _merge_fraction_groups(equation_groups, horizontal_marks)
             equation_source_lines = {
                 id(source_line)
                 for group in equation_groups
@@ -961,7 +997,7 @@ def pdf_to_word(pdf_path: str | Path, word_path: str | Path) -> Path:
                     if text_norm == "目录":
                         _add_toc_field(document, toc_entries)
                 elif kind == "math":
-                    previous_bottom = _add_pdf_equation(document, page, item, previous_bottom)
+                    previous_bottom = _add_math_line(document, item, previous_bottom, horizontal_marks)
                 elif kind == "image":
                     previous_bottom = _add_pdf_image(document, item, previous_bottom, page.rect.width)
                 elif kind == "rule":

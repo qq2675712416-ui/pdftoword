@@ -152,7 +152,7 @@ class PdfWordApp:
         self.open_output_button.pack(side="right", padx=(10, 0))
 
         tk.Label(
-            page, text="正文与表格可编辑；复杂公式保留为高清图片。",
+            page, text="正文、识别出的公式与表格可编辑；插图保留为图片。",
             bg=self.BG, fg="#98A2B3", font=("Microsoft YaHei UI", 9),
         ).pack(anchor="w", side="bottom", pady=(18, 0))
 

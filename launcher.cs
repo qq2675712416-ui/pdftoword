@@ -224,7 +224,7 @@ internal sealed class ConverterWindow : Form
         status.AutoEllipsis = true;
         status.Size = new Size(520, status.Height);
         footer.Controls.Add(status);
-        Label note = MakeLabel("正文与表格可编辑；复杂公式保留为高清图片。", 1, 49,
+        Label note = MakeLabel("正文、识别出的公式与表格可编辑；插图保留为图片。", 1, 49,
             8.5F, false, Color.FromArgb(152, 162, 179));
         footer.Controls.Add(note);
         openOutputButton = new Button();
