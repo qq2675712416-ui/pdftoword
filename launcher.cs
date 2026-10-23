@@ -118,7 +118,7 @@ internal sealed class ConverterWindow : Form
 
         dropPanel = new Panel();
         dropPanel.Dock = DockStyle.Fill;
-        dropPanel.BackColor = Color.FromArgb(232, Color.White);
+        dropPanel.BackColor = Color.FromArgb(188, Color.White);
         dropPanel.BorderStyle = BorderStyle.FixedSingle;
         dropBadge = new Label();
         dropBadge.Text = "PDF";
@@ -158,7 +158,7 @@ internal sealed class ConverterWindow : Form
 
         Panel settings = new Panel();
         settings.Dock = DockStyle.Fill;
-        settings.BackColor = Color.FromArgb(232, Color.White);
+        settings.BackColor = Color.FromArgb(188, Color.White);
         settings.BorderStyle = BorderStyle.FixedSingle;
         layout.Controls.Add(settings, 0, 2);
         Label settingsTitle = MakeLabel("转换设置", 18, 15, 12F, true, Color.FromArgb(24, 34, 48));
