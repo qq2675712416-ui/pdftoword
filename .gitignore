@@ -10,6 +10,7 @@ release/
 dist/
 build/
 PDF转Word-免安装版.zip
+/PDF转Word/
 
 # User documents and conversion samples
 *.pdf
